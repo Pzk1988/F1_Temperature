@@ -6,44 +6,19 @@
 #include "Serial.hpp"
 #include "GpioDriver.hpp"
 #include "C_Interface.hpp"
-#include "PiesCieJebal.hpp"
-//#include "one_wire.h"
+#include "OneWire.hpp"
+#include "Ds18B20.hpp"
+#include "Configuration.hpp"
+#include "ICommunication.hpp"
+#include "Can.hpp"
+#include "TemperatureCard.hpp"
 
 Driver::ISerial* serial;
+Driver::ICommunication* commDriver;
+volatile uint8_t receivedSem = 0;
+volatile CanRxMsg RxMessage;
 
-void setup_delay_timer(TIM_TypeDef *timer) {
-    TIM_DeInit(timer);
-    // Enable Timer clock
-    if (timer == TIM2) {
-        RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
-    } else if (timer == TIM3) {
-        RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
-    } else if (timer == TIM4) {
-        RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM4, ENABLE);
-    } else {
-        // TODO: not implemented
-        while(1){}
-    }
-
-    // Configure timer
-    TIM_TimeBaseInitTypeDef TIM_InitStructure;
-    TIM_InitStructure.TIM_CounterMode = TIM_CounterMode_Up;
-    TIM_InitStructure.TIM_Prescaler = SystemCoreClock / 1000000 - 1;
-    TIM_InitStructure.TIM_Period = 10000 - 1; // Update event every 10000 us (10 ms)
-    TIM_InitStructure.TIM_ClockDivision = TIM_CKD_DIV1;
-    TIM_InitStructure.TIM_RepetitionCounter = 0;
-    TIM_TimeBaseInit(timer, &TIM_InitStructure);
-
-    TIM_Cmd(timer, ENABLE);
-}
-
-extern void delayMicroseconds(uint16_t delay);
-
-typedef struct {
-    s8 integer;
-    u16 fractional;
-    bool is_valid;
-} simple_float;
+static void ProcessCan(TemperatureCard& temperatureCard);
 
 int main()
 {
@@ -57,131 +32,119 @@ int main()
 	serial = new Driver::Serial();
 	serial->Init(115200);
 
+	// Can driver
+	commDriver = new Driver::Can(Configuration::GetId());
+	commDriver->Init(Configuration::GetId());
+
+	// TempCard
+	TemperatureCard* tempCard = new TemperatureCard();
+
 	printf("Stm32F103C8 Hello World\r\n");
 
-
-	//one_wire_reset_pulse();
-	setup_delay_timer(TIM2);
-	one_wire_init(GPIOC, GPIO_Pin_13, TIM2);
-	//printf("Reset %d\r\n", one_wire_reset_pulse());
-	uint8_t tab[10], i=0;
-    tab[i++] = one_wire_reset_pulse();
-    one_wire_write_byte(0x33);
-    tab[i++] = one_wire_read_byte();
-    tab[i++] = one_wire_read_byte();
-    tab[i++] = one_wire_read_byte();
-    tab[i++] = one_wire_read_byte();
-    tab[i++] = one_wire_read_byte();
-    tab[i++] = one_wire_read_byte();
-    tab[i++] = one_wire_read_byte();
-    tab[i++] = one_wire_read_byte();
-
-    for(i = 0; i < 9; i++)
-    {
-    	printf("%x\r\n", tab[i]);
-    }
-
-    uint8_t c;
-    one_wire_device* temp1 = one_wire_search_rom(&c);
-    printf("one wire search %d\r\n", c);
-
-    for(int i = 0; i < 8; i++)
-    {
-        printf("%x ", temp1->address[i]);
-    }
-    printf("\r\n");
-
-    for(int i = 0; i < 8; i++)
-    {
-        printf("%x ", (temp1 + 1)->address[i]);
-    }
-    printf("\r\n");
-
-	one_wire_reset_pulse();
-	one_wire_device wire1;
-	wire1.address[0] = 0x28;
-	wire1.address[1] = 0xec;
-	wire1.address[2] = 0xdc;
-	wire1.address[3] = 0xbb;
-	wire1.address[4] = 0x05;
-	wire1.address[5] = 0x00;
-	wire1.address[6] = 0x00;
-	wire1.address[7] = 0x05;
-	one_wire_match_rom(wire1);
-	one_wire_write_byte(0x44); // Convert temperature
-
-	one_wire_device wire2;
-	wire2.address[0] = 0x28;
-	wire2.address[1] = 0xe6;
-	wire2.address[2] = 0xe0;
-	wire2.address[3] = 0xbb;
-	wire2.address[4] = 0x05;
-	wire2.address[5] = 0x00;
-	wire2.address[6] = 0x00;
-	wire2.address[7] = 0x6f;
-	one_wire_match_rom(wire2);
-	one_wire_write_byte(0x44); // Convert temperature
-
-    one_wire_reset_pulse();
-    one_wire_match_rom(wire1); // Skip ROM
-    one_wire_write_byte(0xBE); // Read scratchpad
-
-    {
-		u8 crc;
-		u8 data[9];
-		one_wire_reset_crc();
-
-		for (i = 0; i < 9; ++i) {
-			data[i] = one_wire_read_byte();
-			crc = one_wire_crc(data[i]);
-		}
-		if (crc != 0)
-		{
-			printf("crc!=0\r\n");
-		}
-
-		u8 temp_msb = data[1]; // Sign byte + lsbit
-		u8 temp_lsb = data[0]; // Temp data plus lsb
-
-		float temp = (temp_msb << 8 | temp_lsb) / powf(2, 4);
-		int rest = (temp - (int)temp) * 1000.0;
-
-		char buffer[10];
-		sprintf(buffer, "%d.%d\r\n", (int)temp, rest);
-		printf(buffer);
-    }
-
-	one_wire_reset_pulse();
-	one_wire_match_rom(wire2); // Skip ROM
-	one_wire_write_byte(0xBE); // Read scratchpad
-    {
-		u8 crc;
-		u8 data[9];
-		one_wire_reset_crc();
-
-		for (i = 0; i < 9; ++i) {
-			data[i] = one_wire_read_byte();
-			crc = one_wire_crc(data[i]);
-		}
-		if (crc != 0)
-		{
-			printf("crc!=0\r\n");
-		}
-
-		u8 temp_msb = data[1]; // Sign byte + lsbit
-		u8 temp_lsb = data[0]; // Temp data plus lsb
-
-		float temp = (temp_msb << 8 | temp_lsb) / powf(2, 4);
-		int rest = (temp - (int)temp) * 1000.0;
-
-		char buffer[10];
-		sprintf(buffer, "%d.%d\r\n", (int)temp, rest);
-		printf(buffer);
-    }
-
-	while(1)
 	{
+		while(1)
+		{
+			// Process temperature sensors
+			tempCard->Process();
 
+			// Send temperature values if changed
+			for(size_t i = 0; i < 4; i++)
+			{
+				if(tempCard->StateChanged(i) == true)
+				{
+					tempCard->ResetStateChanged(i);
+					commDriver->SendDataFrame(0x01, tempCard->GetBank(i), 8);
+					printf("Sending %d: ", i);
+					for(int j = 0; j < 8; j++)
+					{
+						printf("%x ", tempCard->GetBank(i)[j]);
+					}
+					printf("\r\n");
+				}
+			}
+
+			//Process can
+			ProcessCan(*tempCard);
+		}
 	}
 }
 
+void ProcessCan(TemperatureCard& temperatureCard)
+{
+	if(receivedSem == 1)
+	{
+		receivedSem = 0;
+		if(RxMessage.RTR == CAN_RTR_Remote)
+		{
+//			uint16_t input = temperatureCard.GetState();
+//			commDriver->SendDataFrame(0x01, (uint8_t*)&input, 2);
+			printf("RTR id 0x%x from 0x%x\r\n", (RxMessage.StdId & 0x1f), (RxMessage.StdId >> 5));
+		}
+		else
+		{
+			printf("Can 0x%x, 0x%x, 0x%x, 0x%x, 0x%x\r\n", RxMessage.StdId, ((RxMessage.Data[0]) | RxMessage.Data[1] << 8),
+																			((RxMessage.Data[2]) | RxMessage.Data[3] << 8),
+																			((RxMessage.Data[4]) | RxMessage.Data[5] << 8),
+																			((RxMessage.Data[6]) | RxMessage.Data[7] << 8));
+		}
+	}
+}
+
+// TIM3
+//RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
+//TIM_TimeBaseInitTypeDef TIM_InitStructure;
+//TIM_InitStructure.TIM_CounterMode = TIM_CounterMode_Up;
+//TIM_InitStructure.TIM_Prescaler = 36000 - 1;
+//TIM_InitStructure.TIM_Period = 10000 - 1; // Update event every 10000 us (10 ms)
+//TIM_InitStructure.TIM_ClockDivision = TIM_CKD_DIV1;
+//TIM_InitStructure.TIM_RepetitionCounter = 0;
+//TIM_TimeBaseInit(TIM3, &TIM_InitStructure);
+//TIM_Cmd(TIM3, ENABLE);
+//
+//// One wire driver
+//Drivers::OneWire oneWire(GPIOC, GPIO_Pin_13, TIM2);
+//
+//uint16_t startTime[2];
+//uint16_t endTime[2];
+//uint8_t rom[2][9];
+//uint8_t devicesAmount = 2;
+//
+//Drivers::Ds18B20 tempOkno(oneWire, Configuration::GetInputList()[0].address);
+//tempOkno.SetPrecision(0);
+//Drivers::Ds18B20 tempBiurko(oneWire, Configuration::GetInputList()[1].address);
+//
+//startTime[0] = TIM3->CNT;
+//tempOkno.Convert(true);
+//endTime[0] = TIM3->CNT;
+//
+//startTime[1] = TIM3->CNT;
+//tempBiurko.Convert(true);
+//endTime[1] = TIM3->CNT;
+//
+//tempOkno.GetResult(rom[0]);
+//tempBiurko.GetResult(rom[1]);
+//
+//for(size_t i = 0; i < devicesAmount; i++)
+//{
+//	for(size_t j = 0; j < 9; j++)
+//	{
+//		printf("%x ", rom[i][j]);
+//	}
+//	printf("\r\n");
+//
+//	float temp = (rom[i][1] << 8 | rom[i][0]) / powf(2, 4);
+//	int rest = (temp - (int)temp) * 1000.0;
+//
+//	char buffer[10];
+//	sprintf(buffer, "%d.%d\r\n", (int)temp, rest);
+//	printf(buffer);
+//}
+////
+//printf("Time conversion 1: %u, 2: %u, %u\r\n", startTime[0], endTime[0], endTime[0]-startTime[0]);
+//printf("Time conversion 1: %u, 2: %u, %u\r\n", startTime[1], endTime[1], endTime[1]-startTime[1]);
+
+//typedef struct {
+//    s8 integer;
+//    u16 fractional;
+//    bool is_valid;
+//} simple_float;

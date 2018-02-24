@@ -156,9 +156,14 @@ void SysTick_Handler(void)
   * @param  None
   * @retval None
   */
-/*void PPP_IRQHandler(void)
+extern volatile uint8_t receivedSem;
+extern volatile CanRxMsg RxMessage;
+
+void USB_LP_CAN1_RX0_IRQHandler(void)
 {
-}*/
+	CAN_Receive(CAN1, CAN_FIFO0, &RxMessage);
+	receivedSem = 1;
+}
 
 /**
   * @}
