@@ -102,7 +102,7 @@ void TemperatureCard::UpdateAverageValue()
 
 		floatResult[i][averageCounter] = temp_c * 10;
 	}
-	if(averageCounter == 2){
+	if(averageCounter == avarageResultsAmount - 1){
 		averageCounter = 0;
 	} else {
 		averageCounter++; }
@@ -112,7 +112,12 @@ void TemperatureCard::UpdateChangeFlag()
 {
 	for(size_t i = 0; i < 16; i++)
 	{
-		int16_t tmp = (floatResult[i][0] + floatResult[i][1] + floatResult[i][2]) / 3;
+		int32_t tmp = 0;
+		for(size_t j = 0; j < avarageResultsAmount; j++)
+		{
+			tmp += floatResult[i][j];
+		}
+		tmp /= avarageResultsAmount;
 
 		if(tmp != finalResult[i])
 		{

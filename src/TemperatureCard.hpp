@@ -21,9 +21,10 @@ private:
 	void UpdateAverageValue();
 	void UpdateChangeFlag();
 
+	static const uint8_t avarageResultsAmount = 6;
 	std::vector<Drivers::Ds18B20*> temperatureSensors;
 	uint8_t result[32];
-	int16_t floatResult[16][3];
+	int16_t floatResult[16][avarageResultsAmount];
 	int16_t finalResult[16];
 	bool resultBank[4];
 	uint32_t conversionStart = 0;
