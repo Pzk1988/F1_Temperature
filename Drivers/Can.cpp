@@ -150,9 +150,21 @@ uint8_t Can::Init(uint8_t filterId)
 bool Can::SendDataFrame(uint16_t id, uint8_t* pData, uint8_t len)
 {
 	CanTxMsg canTxMsg;
-	canTxMsg.StdId = (ownId << 5) | id;
+	canTxMsg.StdId = (ownId << 5) | (id & 0x1f);
 	canTxMsg.RTR = CAN_RTR_DATA;
 	canTxMsg.IDE = CAN_ID_STD;
+	canTxMsg.DLC = len;
+	memcpy(canTxMsg.Data, pData, len);
+	CAN_Transmit(CAN1, &canTxMsg);
+	return true;
+}
+
+bool Can::SendDataFrame(uint16_t id, uint32_t extId, uint8_t* pData, uint8_t len)
+{
+	CanTxMsg canTxMsg;
+	canTxMsg.RTR = CAN_RTR_DATA;
+	canTxMsg.IDE = CAN_ID_EXT;
+	canTxMsg.ExtId = (extId << 10) | ((ownId & 0x1f) << 5) | (id & 0x1f);
 	canTxMsg.DLC = len;
 	memcpy(canTxMsg.Data, pData, len);
 	CAN_Transmit(CAN1, &canTxMsg);

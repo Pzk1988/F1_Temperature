@@ -53,7 +53,7 @@ int main()
 				if(tempCard->StateChanged(i) == true)
 				{
 					tempCard->ResetStateChanged(i);
-					commDriver->SendDataFrame(0x01, tempCard->GetBank(i), 8);
+					commDriver->SendDataFrame(0x01, i, tempCard->GetBank(i), 8);
 					printf("Sending %d: ", i);
 					for(int j = 0; j < 8; j++)
 					{

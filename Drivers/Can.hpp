@@ -15,6 +15,7 @@ public:
 	uint8_t Init();
 	uint8_t Init(uint8_t filterId);
 	bool SendDataFrame(uint16_t id, uint8_t* pData, uint8_t len);
+	bool SendDataFrame(uint16_t id, uint32_t extId, uint8_t* pData, uint8_t len);
 	bool SendRemoteFrame(uint16_t id);
 
 private:

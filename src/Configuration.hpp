@@ -23,7 +23,7 @@ public:
 
 private:
 	static const uint8_t ID = 4;
-	static const uint16_t tempSensorAmount = 2;
+	static const uint16_t tempSensorAmount = 16;
 	static Drivers::ONE_WIRE_ADDR tempSensors[tempSensorAmount];
 };
 
